@@ -1,0 +1,70 @@
+# Cites — configurazione per Apache / LiteSpeed (Hostinger)
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+AddDefaultCharset UTF-8
+ErrorDocument 404 /404.php
+ErrorDocument 403 /404.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # HTTPS e dominio senza www
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+  RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+  RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+
+  # File interni mai raggiungibili dal web (resta libero .well-known per i certificati)
+  RewriteRule ^(includes|storage)(/|$) - [F,L]
+  RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+  # /index.php chiesto direttamente va alla radice (THE_REQUEST evita i cicli con DirectoryIndex)
+  RewriteCond %{THE_REQUEST} \s/index\.php[\s?] [NC]
+  RewriteRule ^ / [L,R=301]
+
+  # Indirizzi senza .php
+  RewriteRule ^crea/?$ crea.php [L,QSA]
+  RewriteRule ^privacy/?$ privacy.php [L,QSA]
+  RewriteRule ^en/?$ index.php?lang=en [L,QSA]
+  RewriteRule ^en/create/?$ crea.php?lang=en [L,QSA]
+  RewriteRule ^en/privacy/?$ privacy.php?lang=en [L,QSA]
+  RewriteRule ^api/counter/?$ api/counter.php [L,QSA]
+
+  # Le pagine .php chiamate direttamente vanno all'indirizzo pulito
+  RewriteCond %{THE_REQUEST} \s/(crea|privacy)\.php[\s?] [NC]
+  RewriteRule ^ /%1 [L,R=301]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "DENY"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+
+  <FilesMatch "\.(css|js|woff2|png|jpg|jpeg|webp|svg|ico)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.(json|webmanifest|txt|xml)$">
+    Header set Cache-Control "public, max-age=3600"
+  </FilesMatch>
+  <FilesMatch "\.php$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType font/woff2 .woff2
+  AddType application/manifest+json .webmanifest
+  AddType image/svg+xml .svg
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml application/javascript application/json application/manifest+json image/svg+xml
+</IfModule>
