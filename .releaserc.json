@@ -19,17 +19,17 @@
         "preset": "conventionalcommits",
         "presetConfig": {
           "types": [
-            { "type": "feat", "section": "Novità" },
-            { "type": "fix", "section": "Correzioni" },
-            { "type": "perf", "section": "Prestazioni" },
-            { "type": "refactor", "section": "Riorganizzazione del codice" },
-            { "type": "revert", "section": "Annullamenti" },
-            { "type": "docs", "section": "Documentazione", "hidden": true },
-            { "type": "style", "hidden": true },
-            { "type": "test", "hidden": true },
-            { "type": "build", "hidden": true },
-            { "type": "ci", "hidden": true },
-            { "type": "chore", "hidden": true }
+            { "type": "feat", "section": "Novità", "effect": "bump" },
+            { "type": "fix", "section": "Correzioni", "effect": "bump" },
+            { "type": "perf", "section": "Prestazioni", "effect": "bump" },
+            { "type": "revert", "section": "Annullamenti", "effect": "bump" },
+            { "type": "refactor", "section": "Riorganizzazione del codice", "effect": "changelog" },
+            { "type": "docs", "section": "Documentazione", "effect": "hidden" },
+            { "type": "style", "section": "Stile del codice", "effect": "hidden" },
+            { "type": "test", "section": "Test", "effect": "hidden" },
+            { "type": "build", "section": "Build", "effect": "hidden" },
+            { "type": "ci", "section": "Integrazione continua", "effect": "hidden" },
+            { "type": "chore", "section": "Manutenzione", "effect": "hidden" }
           ]
         }
       }
