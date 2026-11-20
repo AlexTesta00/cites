@@ -19,7 +19,7 @@
     "type": "git",
     "url": "git+https://github.com/AlexTesta00/cites.git"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Alex Testa (https://alextesta.space)",
   "type": "module",
   "engines": {
