@@ -1,0 +1,72 @@
+# Controlli su ogni pull request (e richiamati dal workflow di rilascio prima del deploy).
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: 0
+
+jobs:
+  commitlint:
+    name: Conventional Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Controlla i messaggi dei commit
+        run: npx commitlint --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}" --verbose
+
+  verifica:
+    name: Lint, test e build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: npm ci
+      - name: Lint JavaScript
+        run: npm run lint
+      - name: Lint PHP
+        run: find public dev tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Test JavaScript e PHP
+        run: npm test
+      - name: Build (Tailwind, font, librerie)
+        run: npm run build
+      - name: Prova delle pagine con il server PHP
+        run: |
+          php -S 127.0.0.1:8080 -t public dev/router.php > /tmp/php.log 2>&1 &
+          for i in $(seq 1 20); do curl -s -o /dev/null http://127.0.0.1:8080/ && break; sleep 0.25; done
+          check() {
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080$1")
+            echo "$1 -> $code"
+            [ "$code" = "$2" ] || { cat /tmp/php.log; exit 1; }
+          }
+          check / 200
+          check /crea 200
+          check /privacy 200
+          check /en/ 200
+          check /en/create 200
+          check /en/privacy 200
+          check /api/counter 200
+          check /includes/bootstrap.php 404
+          check /storage/index.html 404
+          check /non-esiste 404
+          curl -s http://127.0.0.1:8080/ | grep -q 'assets/css/app.css' || { echo 'CSS non collegato'; exit 1; }

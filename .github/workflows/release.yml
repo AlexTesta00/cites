@@ -1,0 +1,155 @@
+# A ogni push su main: controlli (ci.yml), rilascio semantico (tag + release su GitHub,
+# nessun commit automatico) e, se è uscita una nuova versione, deploy FTPS su Hostinger.
+#
+# Secret da creare (Settings > Secrets and variables > Actions > Secrets):
+#   FTP_SERVER    host FTP di Hostinger (hPanel > Siti web > alextesta.space > File > Account FTP)
+#   FTP_USERNAME  utente FTP
+#   FTP_PASSWORD  password FTP
+# Variabili facoltative (stessa pagina, scheda Variables):
+#   FTP_SERVER_DIR  cartella del sottodominio vista dall'account FTP. Default: ./cites/
+#                   (l'account FTP di Hostinger parte da public_html; il sottodominio vive in public_html/cites)
+#   FTP_PORT        default 21
+#   FTP_SECURITY    strict (default) oppure loose se il certificato FTPS non corrisponde al nome host
+#
+# Senza secret il deploy viene saltato con un avviso: si può rilanciare a mano da Actions > Rilascio e deploy.
+name: Rilascio e deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Pubblica su Hostinger anche se non c'è una nuova versione
+        type: boolean
+        default: true
+
+concurrency:
+  group: rilascio
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: 0
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  rilascio:
+    name: Semantic release
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      released: ${{ steps.version.outputs.released }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Crea tag e release dai Conventional Commits
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+      - name: Versione da pubblicare
+        id: version
+        run: |
+          git fetch --tags --force --quiet
+          tag=$(git tag --points-at HEAD --list 'v*' | sort -V | tail -n1)
+          if [ -n "$tag" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "v0.0.0")
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+          echo "Versione: $tag"
+
+  deploy:
+    name: Deploy su Hostinger
+    needs: rilascio
+    if: needs.rilascio.outputs.released == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://cites.alextesta.space
+    concurrency:
+      group: deploy-hostinger
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Scrive la versione mostrata nel footer
+        env:
+          VERSION: ${{ needs.rilascio.outputs.version }}
+        run: printf "<?php\n\nreturn '%s';\n" "$VERSION" > public/includes/version.php
+      - name: Controlla secret e cartella di destinazione
+        id: check
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ vars.FTP_SERVER_DIR || './cites/' }}
+        run: |
+          missing=""
+          for key in FTP_SERVER FTP_USERNAME FTP_PASSWORD; do
+            [ -n "${!key}" ] || missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning title=Deploy saltato::Mancano i secret:$missing. Aggiungili e rilancia il workflow."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$FTP_SERVER_DIR" == "/" || "$FTP_SERVER_DIR" == "./" || "$FTP_SERVER_DIR" == *".."* || "$FTP_SERVER_DIR" != */ ]]; then
+            echo "::error title=Cartella FTP non valida::FTP_SERVER_DIR deve essere la cartella del sottodominio e finire con /"
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Carica public/ via FTPS (solo i file cambiati)
+        if: steps.check.outputs.ready == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: ${{ vars.FTP_PORT || 21 }}
+          security: ${{ vars.FTP_SECURITY || 'strict' }}
+          local-dir: ./public/
+          server-dir: ${{ vars.FTP_SERVER_DIR || './cites/' }}
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/.DS_Store
+            **/Thumbs.db
+            **/desktop.ini
+            storage/*.json
+            storage/*.lock
+            storage/*.tmp
+      - name: Controlla il sito online
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sleep 5
+          for path in / /crea /en/ /api/counter; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://cites.alextesta.space$path")
+            echo "$path -> $code"
+            [ "$code" = "200" ] || exit 1
+          done
