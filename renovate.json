@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(chore)",
+    "helpers:pinGitHubActionDigests",
+    ":maintainLockFilesMonthly"
+  ],
+  "timezone": "Europe/Rome",
+  "schedule": ["before 7am on monday"],
+  "labels": ["dipendenze"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "Librerie che finiscono nel sito: un aggiornamento deve generare un rilascio e un deploy",
+      "matchPackageNames": ["gsap", "lenis", "tailwindcss", "@tailwindcss/**", "@fontsource/**", "@fontsource-variable/**"],
+      "semanticCommitType": "fix"
+    },
+    {
+      "description": "Tutti i font insieme",
+      "matchPackageNames": ["@fontsource/**", "@fontsource-variable/**"],
+      "groupName": "font"
+    },
+    {
+      "description": "Strumenti di rilascio e qualità",
+      "matchPackageNames": ["semantic-release", "conventional-changelog-conventionalcommits", "@commitlint/**", "husky", "eslint", "@eslint/**", "globals"],
+      "groupName": "strumenti di sviluppo"
+    },
+    {
+      "description": "Aggiornamenti minori e patch degli strumenti: unione automatica se la CI passa",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchPackageNames": ["!gsap", "!lenis", "!tailwindcss", "!@tailwindcss/**", "!@fontsource/**", "!@fontsource-variable/**"],
+      "automerge": true
+    },
+    {
+      "description": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "semanticCommitType": "ci",
+      "automerge": true,
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"]
+    }
+  ]
+}

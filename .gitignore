@@ -1,0 +1,25 @@
+# Dipendenze
+node_modules/
+
+# File generati dalla build (npm run build)
+public/assets/css/app.css
+public/assets/css/fonts.css
+public/assets/fonts/
+public/assets/vendor/
+public/includes/version.php
+
+# Dati scritti dal sito a runtime (contatore, limiti)
+public/storage/*
+!public/storage/.htaccess
+!public/storage/index.html
+
+# Editor, sistema operativo, strumenti locali
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+.env
+.env.*
+coverage/
